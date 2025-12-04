@@ -5,24 +5,24 @@ INPUT_DIRECTORY = "/media/nicolas/DATA/Tecnomedia/Echevarne/Proyecto lectura pet
 MODEL_GENAI = ""
 MODEL_REQUESTY = ""
 REQUESTY_BASE_URL = os.environ.get("REQUESTY_BASE_URL", "")
+GENAI_API_KEY = os.environ.get("GENAI_API_KEY", "")
 
-# Available AI models for GenAI processor
+# Available AI models for GenAI processor (Google's GenAI)
 GENAI_MODELS = {
-    "1": "gemini-1.5-pro",
-    "2": "gpt-4-turbo",
-    "3": "claude-3-opus",
-    "4": "llama-3-70b",
-    "5": "mistral-7b",
+    "1": "gemini-3-pro-preview",
+    "2": "gemini-flash-latest",
 }
 
 # Available AI models for Requesty processor
 REQUESTY_MODELS = {
-    "1": "google/gemini-3-pro-preview",
+    "1": "vertex/gemini-3-pro-preview",
     "2": "azure/gpt-5.1",
     "3": "bedrock/claude-opus-4-5",
     "4": "bedrock/claude-sonnet-4@eu-west-1",
     "5": "coding/gemini-2.5-flash@europe-west1",
     "6": "google/gemini-2.5-pro",
+    "7": "google/gemini-3-pro-preview",
+    "8": "vertex/gemini-2.5-flash@europe-west1",
 }
 
 # Legacy alias for backward compatibility

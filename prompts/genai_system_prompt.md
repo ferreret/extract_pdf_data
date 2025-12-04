@@ -25,15 +25,15 @@ You are a medical-document data extraction expert. Read all pages of the provide
 
 ### Paciente
 
-Full patient name (labels: “Paciente”, “Nombre”, “Apellidos”).
+Full patient name (labels: "Paciente", "Nombre", "Apellidos").
 
 ### FechaNacimiento
 
-From “Fecha de nacimiento”, “F. Nacimiento”. Normalize if possible.
+From "Fecha de nacimiento", "F. Nacimiento". Normalize if possible.
 
 ### Sexo
 
-“H” / “M” / “U”.
+"H" for male / "M" for female / "U" unknown.
 
 ### DocumentoIdentidad
 
@@ -53,7 +53,7 @@ Medical collegiate number.
 
 ### NumeroPeticion
 
-Codes like W12345678. Extract all unique ones. They start with a capital letter followed by eight digits.
+Codes like W12345678. Extract all unique. They start with a capital letter followed by eight digits.
 
 ### tests[]
 

@@ -21,13 +21,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from openai import OpenAI
-from openai.types.chat import (
-    ChatCompletionContentPartImageParam,
-    ChatCompletionContentPartParam,
-    ChatCompletionContentPartTextParam,
-    ChatCompletionSystemMessageParam,
-    ChatCompletionUserMessageParam,
-)
+from openai.types.chat import ChatCompletionSystemMessageParam
+
 
 from logger import debug, error, get_logger, info, warning
 from settings import REQUESTY_BASE_URL
@@ -93,6 +88,7 @@ class RequestyProcessor:
         client = OpenAI(
             base_url=self.api_endpoint,
             api_key=self.api_key,
+            timeout=600,
         )
 
         try:
@@ -119,7 +115,7 @@ class RequestyProcessor:
             # Different models expect different formats for file input
 
             # Check if this is a Google Gemini model
-            if "google/gemini" in model.lower():
+            if "google/gemini" in model.lower() or "vertex/gemini" in model.lower():
                 # Google Gemini models use image_url format with data URI
                 user_message = {
                     "role": "user",
@@ -190,11 +186,11 @@ class RequestyProcessor:
                 spinner_active = False
                 time.sleep(0.2)  # Let spinner finish
                 print("\r" + " " * 80 + "\r", end="")  # Clear spinner line
-                
+
                 # Use streaming to avoid timeout issues
                 self.logger.info(f"Starting streaming request to {model}...")
                 print(f"\033[36mStarting streaming request to {model}...\033[0m")
-                
+
                 response_stream = client.chat.completions.create(
                     model=model,
                     messages=messages,  # type: ignore
@@ -251,10 +247,12 @@ class RequestyProcessor:
                     spinner_active = False
                     time.sleep(0.2)
                     print("\r" + " " * 80 + "\r", end="")  # Clear spinner line
-                    
+
                     self.logger.info("Attempting fallback to non-streaming request...")
-                    print(f"\033[36mAttempting fallback to non-streaming request...\033[0m")
-                    
+                    print(
+                        f"\033[36mAttempting fallback to non-streaming request...\033[0m"
+                    )
+
                     # Start a new spinner for fallback
                     spinner_active = True
                     spinner_thread = threading.Thread(target=show_spinner)
