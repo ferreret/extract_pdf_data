@@ -98,8 +98,10 @@ class RequestyProcessor:
         try:
             # Read and encode the PDF file as base64
             with open(file_path, "rb") as file:
-                file_data = base64.b64encode(file.read()).decode('utf-8')
-                self.logger.debug(f"File encoded successfully, size: {len(file_data)} characters")
+                file_data = base64.b64encode(file.read()).decode("utf-8")
+                self.logger.debug(
+                    f"File encoded successfully, size: {len(file_data)} characters"
+                )
 
             # Load system prompt from file
             with open(
@@ -115,7 +117,7 @@ class RequestyProcessor:
 
             # Create user message with model-specific content type
             # Different models expect different formats for file input
-            
+
             # Check if this is a Google Gemini model
             if "google/gemini" in model.lower():
                 # Google Gemini models use image_url format with data URI
@@ -130,8 +132,8 @@ class RequestyProcessor:
                             "type": "image_url",
                             "image_url": {
                                 "url": f"data:application/pdf;base64,{file_data}"
-                            }
-                        }
+                            },
+                        },
                     ],
                 }
             else:
@@ -147,62 +149,125 @@ class RequestyProcessor:
                             "type": "file_input",
                             "filename": os.path.basename(file_path),
                             "file_data": file_data,
-                        }
+                        },
                     ],
                 }
 
             self.logger.debug(f"Sending request to model: {model}")
-            
+
             # Use raw request to bypass OpenAI type checking since Requesty has different format
             messages = [
                 system_message,
-                user_message  # type: ignore - Requesty API supports file_input type
+                user_message,  # type: ignore - Requesty API supports file_input type
             ]
-            
+
             # Debug: Log the complete request structure
-            self.logger.debug(f"Complete request structure: {json.dumps(messages, indent=2)}")
-            
+            # self.logger.debug(f"Complete request structure: {json.dumps(messages, indent=2)}")
+
             # Start timing and spinner
             start_time = time.time()
             spinner_active = True
-            spinner_chars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
-            
+            spinner_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+
             def show_spinner():
                 i = 0
                 while spinner_active:
-                    print(f"\r\033[36mProcessing PDF with {model}... {spinner_chars[i % len(spinner_chars)]}\033[0m", end="", flush=True)
+                    print(
+                        f"\r\033[36mProcessing PDF with {model}... {spinner_chars[i % len(spinner_chars)]}\033[0m",
+                        end="",
+                        flush=True,
+                    )
                     time.sleep(0.1)
                     i += 1
-            
+
             # Start spinner in separate thread
             spinner_thread = threading.Thread(target=show_spinner)
             spinner_thread.daemon = True
             spinner_thread.start()
-            
+
             try:
-                response = client.chat.completions.create(
+                # Use streaming to avoid timeout issues
+                self.logger.info(f"Starting streaming request to {model}...")
+                response_stream = client.chat.completions.create(
                     model=model,
                     messages=messages,  # type: ignore
                     temperature=0.0,
-                    timeout=600,  # 10 minutes timeout for the API call to handle long processing
+                    stream=True,  # Enable streaming to prevent timeouts
+                    timeout=600,  # Keep timeout for connection establishment
                 )
+
+                # Process streaming response
+                collected_content = []
+                chunk_count = 0
+
+                # Update spinner to show streaming progress
+                def show_streaming_spinner():
+                    i = 0
+                    while spinner_active:
+                        print(
+                            f"\r\033[36mStreaming response from {model}... {spinner_chars[i % len(spinner_chars)]} (Chunks: {chunk_count})\033[0m",
+                            end="",
+                            flush=True,
+                        )
+                        time.sleep(0.1)
+                        i += 1
+
+                # Start streaming spinner
+                spinner_thread = threading.Thread(target=show_streaming_spinner)
+                spinner_thread.daemon = True
+                spinner_thread.start()
+
+                try:
+                    for chunk in response_stream:
+                        if not spinner_active:
+                            break
+
+                        chunk_count += 1
+                        if chunk.choices and len(chunk.choices) > 0:
+                            delta = chunk.choices[0].delta
+                            if delta.content is not None:
+                                content = delta.content
+                                collected_content.append(content)
+                                # Log progress every 50 chunks
+                                if chunk_count % 50 == 0:
+                                    self.logger.debug(
+                                        f"Received {chunk_count} chunks, collected {len(''.join(collected_content))} characters"
+                                    )
+
+                    # Combine all collected content
+                    response_content = "".join(collected_content)
+
+                except Exception as stream_error:
+                    self.logger.error(f"Error during streaming: {str(stream_error)}")
+                    # Fallback to non-streaming if streaming fails
+                    self.logger.info("Attempting fallback to non-streaming request...")
+                    spinner_active = False
+                    time.sleep(0.2)
+
+                    response = client.chat.completions.create(
+                        model=model,
+                        messages=messages,  # type: ignore
+                        temperature=0.0,
+                        timeout=600,
+                    )
+
+                    response_content = (
+                        response.choices[0].message.content
+                        if response.choices and response.choices[0].message.content
+                        else ""
+                    )
+
             finally:
                 # Stop spinner
                 spinner_active = False
                 time.sleep(0.2)  # Let spinner finish
                 print("\r" + " " * 80 + "\r", end="")  # Clear spinner line
-            
+
             # Calculate processing time
             end_time = time.time()
             processing_time = end_time - start_time
 
-            # Extract the actual response data
-            response_content = (
-                response.choices[0].message.content
-                if response.choices and response.choices[0].message.content
-                else ""
-            )
-
+            self.logger.info(f"Streaming completed: {chunk_count} chunks received")
             self.logger.debug(f"Received response: {response_content[:200]}...")
 
             # Only try to parse JSON if we have content
@@ -210,10 +275,10 @@ class RequestyProcessor:
                 try:
                     # Handle markdown code blocks in response
                     # Remove ```json and ``` markers if present
-                    cleaned_content = re.sub(r'```json\s*', '', response_content)
-                    cleaned_content = re.sub(r'```\s*$', '', cleaned_content)
+                    cleaned_content = re.sub(r"```json\s*", "", response_content)
+                    cleaned_content = re.sub(r"```\s*$", "", cleaned_content)
                     cleaned_content = cleaned_content.strip()
-                    
+
                     data = json.loads(cleaned_content)
                 except json.JSONDecodeError as e:
                     self.logger.warning(f"Failed to parse JSON response: {e}")
@@ -221,15 +286,36 @@ class RequestyProcessor:
             else:
                 data = {}
 
+            # For streaming responses, we don't have direct access to usage data
+            # The usage information might be in the last chunk or not available
+            usage_data = {}
+            try:
+                # Try to get usage from the response object if it exists (fallback mode)
+                if (
+                    "response" in locals()
+                    and hasattr(response, "usage")
+                    and response.usage
+                ):
+                    usage_data = response.usage.model_dump()
+                else:
+                    # Log that usage data is not available in streaming mode
+                    self.logger.debug("Usage data not available in streaming mode")
+                    usage_data = {"note": "Usage data not available in streaming mode"}
+            except Exception as usage_error:
+                self.logger.debug(f"Could not extract usage data: {usage_error}")
+                usage_data = {"note": "Usage data extraction failed"}
+
             return {
                 "filename": os.path.basename(file_path),
                 "model": model,
                 "status": "processed",
                 "processing_time": processing_time,
+                "streaming": True,
+                "chunks_received": chunk_count if "chunk_count" in locals() else 0,
                 "data": {
                     "response": response_content,
                     "parsed_data": data,
-                    "usage": response.usage.model_dump() if response.usage else {},
+                    "usage": usage_data,
                 },
             }
         except Exception as e:
@@ -261,30 +347,32 @@ class RequestyProcessor:
 
             # Log the API response to terminal with pretty formatting
             self.logger.info("API Response received successfully")
-            
+
             # Pretty print the parsed data if available
             parsed_data = api_response.get("data", {}).get("parsed_data", {})
             if parsed_data and "raw_response" not in parsed_data:
-                print("\n" + "="*80)
+                print("\n" + "=" * 80)
                 print("📄 EXTRACTED DATA FROM PDF")
-                print("="*80)
+                print("=" * 80)
                 print(json.dumps(parsed_data, indent=2, ensure_ascii=False))
-                print("="*80)
+                print("=" * 80)
             else:
-                print("\n" + "="*80)
+                print("\n" + "=" * 80)
                 print("⚠️  RAW RESPONSE (JSON parsing failed)")
-                print("="*80)
+                print("=" * 80)
                 print(parsed_data.get("raw_response", "No response data"))
-                print("="*80)
+                print("=" * 80)
 
             # Save the parsed data to JSON file with format: pdffilename-processor-modeselected-datetime.json
             pdf_basename = os.path.splitext(filename)[0]  # Remove .pdf extension
             # Replace forward slashes in model name with dashes to create valid filename
             safe_model_name = model.replace("/", "-")
-            
+
             # Add timestamp to filename
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_filename = f"{pdf_basename}-requesty-{safe_model_name}-{timestamp}.json"
+            output_filename = (
+                f"{pdf_basename}-requesty-{safe_model_name}-{timestamp}.json"
+            )
 
             # Get the parsed data from the API response
             parsed_data = api_response.get("data", {}).get("parsed_data", {})
@@ -293,14 +381,23 @@ class RequestyProcessor:
             input_dir = os.path.dirname(pdf_path)
             if not input_dir:
                 input_dir = "."  # Current directory if no path specified
-                
+
             output_path = os.path.join(input_dir, output_filename)
-            
+
             with open(output_path, "w", encoding="utf-8") as output_file:
                 json.dump(parsed_data, output_file, indent=2, ensure_ascii=False)
 
             self.logger.info(f"Requesty processing completed for {filename}")
             self.logger.info(f"Results saved to {output_path}")
+
+            # Generate and display summary report
+            self._generate_summary_report(
+                filename=filename,
+                model=model,
+                api_response=api_response,
+                output_path=output_path,
+                processing_time=api_response.get("processing_time", 0.0),
+            )
 
             return {
                 "filename": filename,
@@ -315,23 +412,32 @@ class RequestyProcessor:
             self.logger.error(f"Error processing {pdf_path} with Requesty: {str(e)}")
             raise
 
-    def _generate_summary_report(self, filename: str, model: str, api_response: Dict[str, Any], output_path: str, processing_time: float) -> None:
+    def _generate_summary_report(
+        self,
+        filename: str,
+        model: str,
+        api_response: Dict[str, Any],
+        output_path: str,
+        processing_time: float,
+    ) -> None:
         """Generate a beautiful summary report with colors and timing information."""
-        
-        # Extract usage data
+
+        # Extract usage data and streaming information
         usage_data = api_response.get("data", {}).get("usage", {})
         parsed_data = api_response.get("data", {}).get("parsed_data", {})
-        
+        streaming_enabled = api_response.get("streaming", False)
+        chunks_received = api_response.get("chunks_received", 0)
+
         # Colors for terminal output
-        GREEN = '\033[92m'
-        BLUE = '\033[94m'
-        YELLOW = '\033[93m'
-        CYAN = '\033[96m'
-        MAGENTA = '\033[95m'
-        WHITE = '\033[97m'
-        BOLD = '\033[1m'
-        RESET = '\033[0m'
-        
+        GREEN = "\033[92m"
+        BLUE = "\033[94m"
+        YELLOW = "\033[93m"
+        CYAN = "\033[96m"
+        MAGENTA = "\033[95m"
+        WHITE = "\033[97m"
+        BOLD = "\033[1m"
+        RESET = "\033[0m"
+
         # Format time
         if processing_time < 60:
             time_str = f"{processing_time:.2f} seconds"
@@ -339,61 +445,100 @@ class RequestyProcessor:
             minutes = int(processing_time // 60)
             seconds = processing_time % 60
             time_str = f"{minutes}m {seconds:.2f}s"
-        
+
         # Count extracted fields
         total_fields = len(parsed_data) if isinstance(parsed_data, dict) else 0
-        non_null_fields = sum(1 for v in parsed_data.values() if v is not None and v != "" and v != []) if isinstance(parsed_data, dict) else 0
-        
+        non_null_fields = (
+            sum(
+                1 for v in parsed_data.values() if v is not None and v != "" and v != []
+            )
+            if isinstance(parsed_data, dict)
+            else 0
+        )
+
         print(f"\n{BOLD}{CYAN}{'='*80}{RESET}")
         print(f"{BOLD}{CYAN}📊 PROCESSING SUMMARY REPORT{RESET}")
         print(f"{BOLD}{CYAN}{'='*80}{RESET}")
-        
+
         print(f"\n{GREEN}📁 File Information:{RESET}")
         print(f"   {WHITE}• Filename: {YELLOW}{filename}{RESET}")
         print(f"   {WHITE}• Model: {YELLOW}{model}{RESET}")
         print(f"   {WHITE}• Output: {YELLOW}{output_path}{RESET}")
-        
+
         print(f"\n{GREEN}⏱️  Processing Time:{RESET}")
         print(f"   {WHITE}• Total Time: {YELLOW}{BOLD}{time_str}{RESET}")
-        
-        if usage_data:
+
+        # Show streaming information if enabled
+        if streaming_enabled:
+            print(f"\n{GREEN}🌊 Streaming Information:{RESET}")
+            print(f"   {WHITE}• Streaming Mode: {YELLOW}Enabled{RESET}")
+            print(f"   {WHITE}• Chunks Received: {YELLOW}{chunks_received}{RESET}")
+            if chunks_received > 0:
+                avg_chunk_size = (
+                    len(api_response.get("data", {}).get("response", ""))
+                    / chunks_received
+                    if chunks_received > 0
+                    else 0
+                )
+                print(
+                    f"   {WHITE}• Average Chunk Size: {YELLOW}{avg_chunk_size:.1f} characters{RESET}"
+                )
+
+        if usage_data and "note" not in usage_data:
             print(f"\n{GREEN}💰 Token Usage:{RESET}")
-            print(f"   {WHITE}• Input Tokens: {YELLOW}{usage_data.get('prompt_tokens', 'N/A')}{RESET}")
-            print(f"   {WHITE}• Output Tokens: {YELLOW}{usage_data.get('completion_tokens', 'N/A')}{RESET}")
-            print(f"   {WHITE}• Total Tokens: {YELLOW}{usage_data.get('total_tokens', 'N/A')}{RESET}")
+            print(
+                f"   {WHITE}• Input Tokens: {YELLOW}{usage_data.get('prompt_tokens', 'N/A')}{RESET}"
+            )
+            print(
+                f"   {WHITE}• Output Tokens: {YELLOW}{usage_data.get('completion_tokens', 'N/A')}{RESET}"
+            )
+            print(
+                f"   {WHITE}• Total Tokens: {YELLOW}{usage_data.get('total_tokens', 'N/A')}{RESET}"
+            )
             print(f"   {WHITE}• Cost: {YELLOW}${usage_data.get('cost', 'N/A')}{RESET}")
-        
+        elif usage_data and "note" in usage_data:
+            print(f"\n{GREEN}💰 Token Usage:{RESET}")
+            print(f"   {WHITE}• {YELLOW}{usage_data.get('note')}{RESET}")
+
         print(f"\n{GREEN}📋 Extraction Results:{RESET}")
         print(f"   {WHITE}• Total Fields: {YELLOW}{total_fields}{RESET}")
         print(f"   {WHITE}• Successfully Extracted: {GREEN}{non_null_fields}{RESET}")
-        print(f"   {WHITE}• Success Rate: {YELLOW}{(non_null_fields/total_fields*100):.1f}%{RESET}" if total_fields > 0 else f"   {WHITE}• Success Rate: {YELLOW}N/A{RESET}")
-        
+        print(
+            f"   {WHITE}• Success Rate: {YELLOW}{(non_null_fields/total_fields*100):.1f}%{RESET}"
+            if total_fields > 0
+            else f"   {WHITE}• Success Rate: {YELLOW}N/A{RESET}"
+        )
+
         # Show key extracted data
         if isinstance(parsed_data, dict) and parsed_data.get("Paciente"):
             print(f"\n{GREEN}👤 Patient Information:{RESET}")
             patient = parsed_data.get("Paciente", {})
             if patient and patient.get("value"):
                 print(f"   {WHITE}• Name: {YELLOW}{patient.get('value')}{RESET}")
-            
+
             birth_date = parsed_data.get("FechaNacimiento", {})
             if birth_date and birth_date.get("value"):
-                print(f"   {WHITE}• Birth Date: {YELLOW}{birth_date.get('value')}{RESET}")
-                
+                print(
+                    f"   {WHITE}• Birth Date: {YELLOW}{birth_date.get('value')}{RESET}"
+                )
+
             sexo = parsed_data.get("Sexo", {})
             if sexo and sexo.get("value"):
                 print(f"   {WHITE}• Gender: {YELLOW}{sexo.get('value')}{RESET}")
-        
+
         tests = parsed_data.get("tests", [])
         if tests:
             print(f"\n{GREEN}🧪 Medical Tests ({len(tests)} found):{RESET}")
             for i, test in enumerate(tests[:3], 1):  # Show first 3 tests
                 description = test.get("description", "Unknown")
                 sample_type = test.get("sample_type", "Unknown")
-                print(f"   {WHITE}{i}. {CYAN}{description[:60]}{'...' if len(description) > 60 else ''}{RESET}")
+                print(
+                    f"   {WHITE}{i}. {CYAN}{description[:60]}{'...' if len(description) > 60 else ''}{RESET}"
+                )
                 print(f"      {WHITE}Sample Type: {YELLOW}{sample_type}{RESET}")
             if len(tests) > 3:
                 print(f"   {WHITE}... and {len(tests) - 3} more tests{RESET}")
-        
+
         print(f"\n{BOLD}{GREEN}✅ Processing completed successfully!{RESET}")
         print(f"{BOLD}{CYAN}{'='*80}{RESET}\n")
 
@@ -416,7 +561,7 @@ def process_with_requesty(pdf_path: str, model: str) -> Dict[str, Any]:
         info(f"Successfully processed {os.path.basename(pdf_path)} with Requesty")
         if result.get("output_file"):
             info(f"Results saved to {result['output_file']}")
-        debug(f"Processing result: {result}")
+        # debug(f"Processing result: {result}")
         return result
     except Exception as e:
         error(f"Failed to process {pdf_path} with Requesty: {str(e)}")
