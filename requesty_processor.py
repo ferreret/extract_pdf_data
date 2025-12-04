@@ -186,8 +186,15 @@ class RequestyProcessor:
             spinner_thread.start()
 
             try:
+                # Stop the initial spinner and clear the line before starting streaming
+                spinner_active = False
+                time.sleep(0.2)  # Let spinner finish
+                print("\r" + " " * 80 + "\r", end="")  # Clear spinner line
+                
                 # Use streaming to avoid timeout issues
                 self.logger.info(f"Starting streaming request to {model}...")
+                print(f"\033[36mStarting streaming request to {model}...\033[0m")
+                
                 response_stream = client.chat.completions.create(
                     model=model,
                     messages=messages,  # type: ignore
@@ -199,6 +206,7 @@ class RequestyProcessor:
                 # Process streaming response
                 collected_content = []
                 chunk_count = 0
+                spinner_active = True  # Reactivate spinner for streaming
 
                 # Update spinner to show streaming progress
                 def show_streaming_spinner():
@@ -240,9 +248,18 @@ class RequestyProcessor:
                 except Exception as stream_error:
                     self.logger.error(f"Error during streaming: {str(stream_error)}")
                     # Fallback to non-streaming if streaming fails
-                    self.logger.info("Attempting fallback to non-streaming request...")
                     spinner_active = False
                     time.sleep(0.2)
+                    print("\r" + " " * 80 + "\r", end="")  # Clear spinner line
+                    
+                    self.logger.info("Attempting fallback to non-streaming request...")
+                    print(f"\033[36mAttempting fallback to non-streaming request...\033[0m")
+                    
+                    # Start a new spinner for fallback
+                    spinner_active = True
+                    spinner_thread = threading.Thread(target=show_spinner)
+                    spinner_thread.daemon = True
+                    spinner_thread.start()
 
                     response = client.chat.completions.create(
                         model=model,
