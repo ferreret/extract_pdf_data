@@ -23,7 +23,12 @@ load_dotenv()
 from google import genai
 from google.genai import types
 import httpx
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+)
 
 from src.utils.logger import debug, error, get_logger, info, warning
 from src.config.settings import GENAI_API_KEY
@@ -48,8 +53,12 @@ class GenAIProcessor:
         # Configure the GenAI client with proper timeout
         # Set timeout to 10 minutes for large file processing
         http_options = types.HttpOptions(
-            client_args={'timeout': httpx.Timeout(600.0)},  # 10 minutes timeout using httpx.Timeout
-            async_client_args={'timeout': httpx.Timeout(600.0)}  # Same timeout for async operations
+            client_args={
+                "timeout": httpx.Timeout(600.0)
+            },  # 10 minutes timeout using httpx.Timeout
+            async_client_args={
+                "timeout": httpx.Timeout(600.0)
+            },  # Same timeout for async operations
         )
         self.logger.info(f"Initializing GenAI client with timeout: 600.0 seconds")
         self.client = genai.Client(api_key=self.api_key, http_options=http_options)
@@ -94,55 +103,33 @@ class GenAIProcessor:
         try:
             # Load system prompt from file
             with open(
-                os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "prompts", "genai_system_prompt.md"), "r", encoding="utf-8"
+                os.path.join(
+                    os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+                    "prompts",
+                    "genai_system_prompt.md",
+                ),
+                "r",
+                encoding="utf-8",
             ) as prompt_file:
                 system_prompt = prompt_file.read()
 
-            # Start timing and spinner
+            # Start timing
             start_time = time.time()
-            spinner_active = True
-            spinner_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-
-            def show_spinner():
-                i = 0
-                while spinner_active:
-                    print(
-                        f"\r\033[36mProcessing PDF with {model}... {spinner_chars[i % len(spinner_chars)]}\033[0m",
-                        end="",
-                        flush=True,
-                    )
-                    time.sleep(0.1)
-                    i += 1
-
-            # Start spinner in separate thread
-            spinner_thread = threading.Thread(target=show_spinner)
-            spinner_thread.daemon = True
-            spinner_thread.start()
 
             try:
-                # Stop the initial spinner and clear the line before starting processing
-                spinner_active = False
-                time.sleep(0.2)  # Let spinner finish
-                print("\r" + " " * 80 + "\r", end="")  # Clear spinner line
 
                 # Upload the file to GenAI
                 self.logger.info(f"Uploading file to GenAI...")
                 print(f"\033[36mUploading file to GenAI...\033[0m")
 
-                # Re-activate spinner for upload
-                spinner_active = True
-                spinner_thread = threading.Thread(target=show_spinner)
-                spinner_thread.daemon = True
-                spinner_thread.start()
-
-                try:
+                if True:
                     # Upload the file
                     file = self.client.files.upload(
                         file=file_path,
                         config=types.UploadFileConfig(
                             display_name=os.path.basename(file_path),
-                            mime_type='application/pdf'
-                        )
+                            mime_type="application/pdf",
+                        ),
                     )
 
                     # Wait for processing to complete
@@ -156,44 +143,42 @@ class GenAIProcessor:
 
                     self.logger.debug(f"File uploaded successfully: {file.uri}")
 
-                finally:
-                    # Stop upload spinner
-                    spinner_active = False
-                    time.sleep(0.2)
-                    print("\r" + " " * 80 + "\r", end="")  # Clear spinner line
-
                 # Initialize the model
                 # The new GenAI client doesn't use GenerativeModel class
                 # We'll use the client directly for content generation
 
-                # Start processing spinner
-                spinner_active = True
-                spinner_thread = threading.Thread(target=show_spinner)
-                spinner_thread.daemon = True
-                spinner_thread.start()
-
-                try:
+                if True:
                     # Generate content with the file
                     self.logger.info(f"Starting content generation with {model}...")
                     print(f"\033[36mStarting content generation with {model}...\033[0m")
 
                     # Log the start of API request
                     api_start_time = time.time()
-                    self.logger.info(f"Sending API request to generate content with model: {genai_model}")
+                    self.logger.info(
+                        f"Sending API request to generate content with model: {genai_model}"
+                    )
                     self.logger.debug(f"File URI: {file.uri}")
-                    self.logger.debug(f"System prompt length: {len(system_prompt)} characters")
+                    self.logger.debug(
+                        f"System prompt length: {len(system_prompt)} characters"
+                    )
 
                     # Use streaming with retry and timeout configuration
                     self.logger.info("Starting streaming response...")
                     full_text = ""
                     input_tokens = 0
                     output_tokens = 0
-                    
+
                     # Configure retry policy for transient errors
                     @retry(
                         stop=stop_after_attempt(3),
                         wait=wait_exponential(multiplier=1, min=4, max=10),
-                        retry=retry_if_exception_type((httpx.RemoteProtocolError, httpx.ConnectError, ConnectionError))
+                        retry=retry_if_exception_type(
+                            (
+                                httpx.RemoteProtocolError,
+                                httpx.ConnectError,
+                                ConnectionError,
+                            )
+                        ),
                     )
                     def make_request():
                         return self.client.models.generate_content(
@@ -207,21 +192,28 @@ class GenAIProcessor:
                                 temperature=0.0,
                             ),
                         )
-                    
+
                     try:
                         response = make_request()
-                        
+
                         # Handle response - check if it's a stream or regular response
-                        if hasattr(response, 'text'):
+                        if hasattr(response, "text"):
                             # Regular response
                             full_text = response.text
                             print(f"\033[36m[RESPONSE] Received response:\033[0m")
                             print(full_text)
-                            
+
                             # Extract usage metadata if available
-                            if hasattr(response, 'usage_metadata') and response.usage_metadata:
-                                input_tokens = response.usage_metadata.prompt_token_count
-                                output_tokens = response.usage_metadata.candidates_token_count
+                            if (
+                                hasattr(response, "usage_metadata")
+                                and response.usage_metadata
+                            ):
+                                input_tokens = (
+                                    response.usage_metadata.prompt_token_count
+                                )
+                                output_tokens = (
+                                    response.usage_metadata.candidates_token_count
+                                )
                         else:
                             # Stream response - iterate over response chunks
                             print(f"\033[36m[STREAM] Receiving response:\033[0m")
@@ -231,52 +223,72 @@ class GenAIProcessor:
                                     if isinstance(chunk, tuple) and len(chunk) > 1:
                                         # If chunk is a tuple, the second element might contain the content
                                         chunk_content = chunk[1]
-                                        if hasattr(chunk_content, 'text') and chunk_content.text:
+                                        if (
+                                            hasattr(chunk_content, "text")
+                                            and chunk_content.text
+                                        ):
                                             text = chunk_content.text
                                             print(text, end="", flush=True)
                                             full_text += text
-                                    elif hasattr(chunk, 'text') and chunk.text:
+                                    elif hasattr(chunk, "text") and chunk.text:
                                         # Direct chunk with text
                                         text = chunk.text
                                         print(text, end="", flush=True)
                                         full_text += text
                                 except Exception as chunk_error:
-                                    self.logger.debug(f"Error processing chunk: {chunk_error}")
+                                    self.logger.debug(
+                                        f"Error processing chunk: {chunk_error}"
+                                    )
                                     pass
 
                                 # Extract usage metadata if available
                                 try:
                                     if isinstance(chunk, tuple) and len(chunk) > 1:
                                         chunk_content = chunk[1]
-                                        if hasattr(chunk_content, 'usage_metadata') and chunk_content.usage_metadata:
-                                            input_tokens = chunk_content.usage_metadata.prompt_token_count or 0
-                                            output_tokens = chunk_content.usage_metadata.candidates_token_count or 0
-                                    elif hasattr(chunk, 'usage_metadata') and chunk.usage_metadata:
-                                        input_tokens = chunk.usage_metadata.prompt_token_count or 0
-                                        output_tokens = chunk.usage_metadata.candidates_token_count or 0
+                                        if (
+                                            hasattr(chunk_content, "usage_metadata")
+                                            and chunk_content.usage_metadata
+                                        ):
+                                            input_tokens = (
+                                                chunk_content.usage_metadata.prompt_token_count
+                                                or 0
+                                            )
+                                            output_tokens = (
+                                                chunk_content.usage_metadata.candidates_token_count
+                                                or 0
+                                            )
+                                    elif (
+                                        hasattr(chunk, "usage_metadata")
+                                        and chunk.usage_metadata
+                                    ):
+                                        input_tokens = (
+                                            chunk.usage_metadata.prompt_token_count or 0
+                                        )
+                                        output_tokens = (
+                                            chunk.usage_metadata.candidates_token_count
+                                            or 0
+                                        )
                                 except Exception as usage_error:
-                                    self.logger.debug(f"Error extracting usage: {usage_error}")
+                                    self.logger.debug(
+                                        f"Error extracting usage: {usage_error}"
+                                    )
 
                             print()  # New line after streaming
-                        
+
                         self.logger.info("Response completed successfully")
-                        
+
                     except Exception as stream_error:
                         self.logger.error(f"Request failed: {str(stream_error)}")
                         raise stream_error
-                    
+
                     # Log the completion of API request
                     api_end_time = time.time()
                     api_duration = api_end_time - api_start_time
-                    self.logger.info(f"API request completed successfully in {api_duration:.2f} seconds")
+                    self.logger.info(
+                        f"API request completed successfully in {api_duration:.2f} seconds"
+                    )
 
                     response_content = full_text if full_text else ""
-
-                finally:
-                    # Stop processing spinner
-                    spinner_active = False
-                    time.sleep(0.2)
-                    print("\r" + " " * 80 + "\r", end="")  # Clear spinner line
 
                 # Clean up the uploaded file with proper error handling
                 if file.name:  # Check if name is not None
@@ -284,13 +296,12 @@ class GenAIProcessor:
                         self.client.files.delete(name=file.name)
                         self.logger.debug(f"Deleted uploaded file: {file.name}")
                     except Exception as delete_error:
-                        self.logger.warning(f"Failed to delete uploaded file {file.name}: {str(delete_error)}")
+                        self.logger.warning(
+                            f"Failed to delete uploaded file {file.name}: {str(delete_error)}"
+                        )
 
             finally:
-                # Ensure spinner is stopped
-                spinner_active = False
-                time.sleep(0.2)
-                print("\r" + " " * 80 + "\r", end="")  # Clear spinner line
+                pass
 
             # Calculate processing time
             end_time = time.time()
@@ -300,8 +311,14 @@ class GenAIProcessor:
             self.logger.debug(f"Received response: {response_content[:200]}...")
 
             # Log token usage
-            if input_tokens and output_tokens and (input_tokens > 0 or output_tokens > 0):
-                self.logger.info(f"Token usage - Input: {input_tokens}, Output: {output_tokens}, Total: {input_tokens + output_tokens}")
+            if (
+                input_tokens
+                and output_tokens
+                and (input_tokens > 0 or output_tokens > 0)
+            ):
+                self.logger.info(
+                    f"Token usage - Input: {input_tokens}, Output: {output_tokens}, Total: {input_tokens + output_tokens}"
+                )
 
             # Only try to parse JSON if we have content
             if response_content:
@@ -322,7 +339,11 @@ class GenAIProcessor:
             # Extract usage data if available
             usage_data = {}
             try:
-                if input_tokens and output_tokens and (input_tokens > 0 or output_tokens > 0):
+                if (
+                    input_tokens
+                    and output_tokens
+                    and (input_tokens > 0 or output_tokens > 0)
+                ):
                     usage_data = {
                         "prompt_token_count": input_tokens,
                         "candidates_token_count": output_tokens,
@@ -561,20 +582,22 @@ class GenAIProcessor:
 
     def list_uploaded_files(self) -> List[Dict[str, Any]]:
         """List all uploaded files in the GenAI storage.
-        
+
         Returns:
             List of file information dictionaries.
         """
         try:
             files = []
             for file in self.client.files.list():
-                files.append({
-                    "name": file.name,
-                    "display_name": file.display_name,
-                    "size_bytes": file.size_bytes,
-                    "state": file.state,
-                    "uri": file.uri
-                })
+                files.append(
+                    {
+                        "name": file.name,
+                        "display_name": file.display_name,
+                        "size_bytes": file.size_bytes,
+                        "state": file.state,
+                        "uri": file.uri,
+                    }
+                )
             return files
         except Exception as e:
             self.logger.error(f"Failed to list uploaded files: {str(e)}")
@@ -582,7 +605,7 @@ class GenAIProcessor:
 
     def cleanup_all_uploaded_files(self) -> Dict[str, Any]:
         """Clean up all uploaded files in the GenAI storage.
-        
+
         Returns:
             Dictionary with cleanup results including success/failure counts.
         """
@@ -592,9 +615,9 @@ class GenAIProcessor:
             deleted_count = 0
             failed_count = 0
             failed_files = []
-            
+
             self.logger.info(f"Found {total_files} uploaded files to clean up")
-            
+
             for file_info in uploaded_files:
                 file_name = file_info.get("name")
                 if file_name:
@@ -603,20 +626,26 @@ class GenAIProcessor:
                         self.logger.debug(f"Deleted uploaded file: {file_name}")
                         deleted_count += 1
                     except Exception as delete_error:
-                        self.logger.warning(f"Failed to delete uploaded file {file_name}: {str(delete_error)}")
+                        self.logger.warning(
+                            f"Failed to delete uploaded file {file_name}: {str(delete_error)}"
+                        )
                         failed_count += 1
-                        failed_files.append({"name": file_name, "error": str(delete_error)})
-            
+                        failed_files.append(
+                            {"name": file_name, "error": str(delete_error)}
+                        )
+
             result = {
                 "total_files": total_files,
                 "deleted_count": deleted_count,
                 "failed_count": failed_count,
-                "failed_files": failed_files
+                "failed_files": failed_files,
             }
-            
-            self.logger.info(f"Cleanup completed: {deleted_count}/{total_files} files deleted successfully")
+
+            self.logger.info(
+                f"Cleanup completed: {deleted_count}/{total_files} files deleted successfully"
+            )
             return result
-            
+
         except Exception as e:
             self.logger.error(f"Failed to cleanup uploaded files: {str(e)}")
             return {"error": str(e)}

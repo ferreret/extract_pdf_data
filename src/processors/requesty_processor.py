@@ -101,7 +101,13 @@ class RequestyProcessor:
 
             # Load system prompt from file
             with open(
-                os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "prompts", "requesty_system_prompt.md"), "r", encoding="utf-8"
+                os.path.join(
+                    os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+                    "prompts",
+                    "requesty_system_prompt.md",
+                ),
+                "r",
+                encoding="utf-8",
             ) as prompt_file:
                 system_prompt = prompt_file.read()
 
@@ -160,32 +166,11 @@ class RequestyProcessor:
             # Debug: Log the complete request structure
             # self.logger.debug(f"Complete request structure: {json.dumps(messages, indent=2)}")
 
-            # Start timing and spinner
+            # Start timing
             start_time = time.time()
-            spinner_active = True
-            spinner_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
-            def show_spinner():
-                i = 0
-                while spinner_active:
-                    print(
-                        f"\r\033[36mProcessing PDF with {model}... {spinner_chars[i % len(spinner_chars)]}\033[0m",
-                        end="",
-                        flush=True,
-                    )
-                    time.sleep(0.1)
-                    i += 1
-
-            # Start spinner in separate thread
-            spinner_thread = threading.Thread(target=show_spinner)
-            spinner_thread.daemon = True
-            spinner_thread.start()
-
-            try:
-                # Stop the initial spinner and clear the line before starting streaming
-                spinner_active = False
-                time.sleep(0.2)  # Let spinner finish
-                print("\r" + " " * 80 + "\r", end="")  # Clear spinner line
+            if True:
+                pass
 
                 # Use streaming to avoid timeout issues
                 self.logger.info(f"Starting streaming request to {model}...")
@@ -202,29 +187,9 @@ class RequestyProcessor:
                 # Process streaming response
                 collected_content = []
                 chunk_count = 0
-                spinner_active = True  # Reactivate spinner for streaming
-
-                # Update spinner to show streaming progress
-                def show_streaming_spinner():
-                    i = 0
-                    while spinner_active:
-                        print(
-                            f"\r\033[36mStreaming response from {model}... {spinner_chars[i % len(spinner_chars)]} (Chunks: {chunk_count})\033[0m",
-                            end="",
-                            flush=True,
-                        )
-                        time.sleep(0.1)
-                        i += 1
-
-                # Start streaming spinner
-                spinner_thread = threading.Thread(target=show_streaming_spinner)
-                spinner_thread.daemon = True
-                spinner_thread.start()
 
                 try:
                     for chunk in response_stream:
-                        if not spinner_active:
-                            break
 
                         chunk_count += 1
                         if chunk.choices and len(chunk.choices) > 0:
@@ -253,12 +218,6 @@ class RequestyProcessor:
                         f"\033[36mAttempting fallback to non-streaming request...\033[0m"
                     )
 
-                    # Start a new spinner for fallback
-                    spinner_active = True
-                    spinner_thread = threading.Thread(target=show_spinner)
-                    spinner_thread.daemon = True
-                    spinner_thread.start()
-
                     response = client.chat.completions.create(
                         model=model,
                         messages=messages,  # type: ignore
@@ -271,12 +230,6 @@ class RequestyProcessor:
                         if response.choices and response.choices[0].message.content
                         else ""
                     )
-
-            finally:
-                # Stop spinner
-                spinner_active = False
-                time.sleep(0.2)  # Let spinner finish
-                print("\r" + " " * 80 + "\r", end="")  # Clear spinner line
 
             # Calculate processing time
             end_time = time.time()
