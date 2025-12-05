@@ -64,7 +64,7 @@ def demonstrate_logging():
         logger.exception("An exception occurred during division")
 
 
-def get_processing_function(choice: str) -> Callable[[str, str], Dict[str, Any]]:
+def get_processing_function(choice: str) -> Callable[[str, str, bool], Dict[str, Any]]:
     """Get the appropriate processing function based on the choice.
 
     Args:
@@ -132,6 +132,25 @@ def validate_and_normalize_choice(choice: Optional[str]) -> str:
     return normalized_choice
 
 
+def get_streaming_choice() -> bool:
+    """Prompt the user to select streaming or non-streaming mode.
+
+    Returns:
+        True if streaming is selected, False otherwise.
+    """
+    while True:
+        try:
+            choice_input = input("\nEnable streaming (y/n)? [y]: ").strip().lower()
+            if choice_input in ["", "y", "yes"]:
+                return True
+            if choice_input in ["n", "no"]:
+                return False
+            warning("Invalid choice. Please enter 'y' or 'n'.")
+        except EOFError:
+            error("No input received. Exiting program.")
+            sys.exit(1)
+
+
 def get_user_choice() -> str:
     """Prompt the user to select a processing option.
 
@@ -193,12 +212,13 @@ def show_model_selection_menu(models: dict, option_name: str) -> str:
             sys.exit(0)
 
 
-def process_pdf_files(choice: str, model: str) -> None:
+def process_pdf_files(choice: str, model: str, streaming: bool = True) -> None:
     """Process all PDF files in the input directory using the specified method.
 
     Args:
         choice: The processing method to use ("genai" or "requesty").
         model: The selected AI model to use for processing.
+        streaming: Whether to use streaming for API responses.
     """
     try:
         pdf_files = find_pdf_files(INPUT_DIRECTORY)
@@ -216,7 +236,7 @@ def process_pdf_files(choice: str, model: str) -> None:
         for pdf_file in pdf_files:
             pdf_path = os.path.join(INPUT_DIRECTORY, pdf_file)
             info(f"Processing file: {pdf_file}")
-            process_function(pdf_path, model)
+            process_function(pdf_path, model, streaming)
 
     except OSError as e:
         error(str(e))
@@ -262,8 +282,17 @@ def start_process(choice: Optional[str] = None) -> None:
     else:  # REQUESTY_OPTION
         selected_model = show_model_selection_menu(REQUESTY_MODELS, REQUESTY_OPTION)
 
-    # Process all PDF files with the selected method and model
-    process_pdf_files(choice, selected_model)
+    # Get streaming preference
+    # If choice was provided via CLI, we might want to default to True or add a flag
+    # For now, we'll ask if not automated (though here we process interactive flow)
+    # Since start_process is the interactive entry point mostly, let's ask.
+    # Note: If args.choice is present, we still land here.
+    # We should add CLI support for streaming too, but for interactive:
+    streaming = get_streaming_choice()
+    info(f"Streaming enabled: {streaming}")
+
+    # Process all PDF files with the selected method, model, and streaming preference
+    process_pdf_files(choice, selected_model, streaming)
 
 
 def parse_arguments() -> argparse.Namespace:

@@ -62,7 +62,9 @@ class RequestyProcessor:
 
         self.logger.debug(f"File validation successful: {pdf_path}")
 
-    def send_to_requesty_api(self, file_path: str, model: str) -> Dict[str, Any]:
+    def send_to_requesty_api(
+        self, file_path: str, model: str, streaming: bool = True
+    ) -> Dict[str, Any]:
         """Send the PDF to Requesty API using the specified model.
 
         Args:
@@ -172,15 +174,21 @@ class RequestyProcessor:
             if True:
                 pass
 
-                # Use streaming to avoid timeout issues
-                self.logger.info(f"Starting streaming request to {model}...")
-                print(f"\033[36mStarting streaming request to {model}...\033[0m")
+                # Use streaming based on user preference
+                if streaming:
+                    self.logger.info(f"Starting streaming request to {model}...")
+                    print(f"\033[36mStarting streaming request to {model}...\033[0m")
+                else:
+                    self.logger.info(f"Starting non-streaming request to {model}...")
+                    print(
+                        f"\033[36mStarting non-streaming request to {model}...\033[0m"
+                    )
 
                 response_stream = client.chat.completions.create(
                     model=model,
                     messages=messages,  # type: ignore
                     temperature=0.0,
-                    stream=True,  # Enable streaming to prevent timeouts
+                    stream=streaming,  # Enable/disable streaming
                     timeout=600,  # Keep timeout for connection establishment
                 )
 
@@ -188,43 +196,52 @@ class RequestyProcessor:
                 collected_content = []
                 chunk_count = 0
 
-                try:
-                    for chunk in response_stream:
+                if streaming:
+                    try:
+                        for chunk in response_stream:
 
-                        chunk_count += 1
-                        if chunk.choices and len(chunk.choices) > 0:
-                            delta = chunk.choices[0].delta
-                            if delta.content is not None:
-                                content = delta.content
-                                collected_content.append(content)
-                                # Log progress every 50 chunks
-                                if chunk_count % 50 == 0:
-                                    self.logger.debug(
-                                        f"Received {chunk_count} chunks, collected {len(''.join(collected_content))} characters"
-                                    )
+                            chunk_count += 1
+                            if chunk.choices and len(chunk.choices) > 0:
+                                delta = chunk.choices[0].delta
+                                if delta.content is not None:
+                                    content = delta.content
+                                    collected_content.append(content)
+                                    # Log progress every 50 chunks
+                                    if chunk_count % 50 == 0:
+                                        self.logger.debug(
+                                            f"Received {chunk_count} chunks, collected {len(''.join(collected_content))} characters"
+                                        )
 
-                    # Combine all collected content
-                    response_content = "".join(collected_content)
+                        # Combine all collected content
+                        response_content = "".join(collected_content)
 
-                except Exception as stream_error:
-                    self.logger.error(f"Error during streaming: {str(stream_error)}")
-                    # Fallback to non-streaming if streaming fails
-                    spinner_active = False
-                    time.sleep(0.2)
-                    print("\r" + " " * 80 + "\r", end="")  # Clear spinner line
+                    except Exception as stream_error:
+                        self.logger.error(
+                            f"Error during streaming: {str(stream_error)}"
+                        )
+                        # Fallback to non-streaming if streaming fails
+                        self.logger.info(
+                            "Attempting fallback to non-streaming request..."
+                        )
+                        print(
+                            f"\033[36mAttempting fallback to non-streaming request...\033[0m"
+                        )
 
-                    self.logger.info("Attempting fallback to non-streaming request...")
-                    print(
-                        f"\033[36mAttempting fallback to non-streaming request...\033[0m"
-                    )
+                        response = client.chat.completions.create(
+                            model=model,
+                            messages=messages,  # type: ignore
+                            temperature=0.0,
+                            timeout=600,
+                        )
 
-                    response = client.chat.completions.create(
-                        model=model,
-                        messages=messages,  # type: ignore
-                        temperature=0.0,
-                        timeout=600,
-                    )
-
+                        response_content = (
+                            response.choices[0].message.content
+                            if response.choices and response.choices[0].message.content
+                            else ""
+                        )
+                else:
+                    # Non-streaming mode
+                    response = response_stream  # Client returns standard response when stream=False
                     response_content = (
                         response.choices[0].message.content
                         if response.choices and response.choices[0].message.content
@@ -278,8 +295,8 @@ class RequestyProcessor:
                 "model": model,
                 "status": "processed",
                 "processing_time": processing_time,
-                "streaming": True,
-                "chunks_received": chunk_count if "chunk_count" in locals() else 0,
+                "streaming": streaming,
+                "chunks_received": chunk_count if streaming else 0,
                 "data": {
                     "response": response_content,
                     "parsed_data": data,
@@ -290,7 +307,9 @@ class RequestyProcessor:
             self.logger.error(f"Failed to process file with Requesty API: {str(e)}")
             raise
 
-    def process(self, pdf_path: str, model: str) -> Dict[str, Any]:
+    def process(
+        self, pdf_path: str, model: str, streaming: bool = True
+    ) -> Dict[str, Any]:
         """Process a PDF file using Requesty method.
 
         Args:
@@ -311,7 +330,7 @@ class RequestyProcessor:
             )
 
             # Send to Requesty API for analysis with selected model
-            api_response = self.send_to_requesty_api(pdf_path, model)
+            api_response = self.send_to_requesty_api(pdf_path, model, streaming)
 
             # Log the API response to terminal with pretty formatting
             self.logger.info("API Response received successfully")
@@ -511,7 +530,9 @@ class RequestyProcessor:
         print(f"{BOLD}{CYAN}{'='*80}{RESET}\n")
 
 
-def process_with_requesty(pdf_path: str, model: str) -> Dict[str, Any]:
+def process_with_requesty(
+    pdf_path: str, model: str, streaming: bool = True
+) -> Dict[str, Any]:
     """Process a PDF file using the Requesty method.
 
     This is a convenience function that maintains compatibility with main.py.
@@ -525,7 +546,7 @@ def process_with_requesty(pdf_path: str, model: str) -> Dict[str, Any]:
     """
     try:
         processor = RequestyProcessor()
-        result = processor.process(pdf_path, model)
+        result = processor.process(pdf_path, model, streaming)
         info(f"Successfully processed {os.path.basename(pdf_path)} with Requesty")
         if result.get("output_file"):
             info(f"Results saved to {result['output_file']}")

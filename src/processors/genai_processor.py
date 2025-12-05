@@ -85,12 +85,15 @@ class GenAIProcessor:
 
         self.logger.debug(f"File validation successful: {pdf_path}")
 
-    def send_to_genai_api(self, file_path: str, model: str) -> Dict[str, Any]:
+    def send_to_genai_api(
+        self, file_path: str, model: str, streaming: bool = True
+    ) -> Dict[str, Any]:
         """Send the PDF to GenAI API using the specified model.
 
         Args:
             file_path: The full path to the PDF file.
             model: The selected AI model to use for processing.
+            streaming: Whether to use streaming for API responses.
 
         Returns:
             Dictionary containing the API response.
@@ -163,7 +166,11 @@ class GenAIProcessor:
                     )
 
                     # Use streaming with retry and timeout configuration
-                    self.logger.info("Starting streaming response...")
+                    if streaming:
+                        self.logger.info("Starting streaming response...")
+                    else:
+                        self.logger.info("Starting non-streaming response...")
+
                     full_text = ""
                     input_tokens = 0
                     output_tokens = 0
@@ -181,39 +188,56 @@ class GenAIProcessor:
                         ),
                     )
                     def make_request():
-                        return self.client.models.generate_content(
-                            model=genai_model,
-                            contents=[
-                                file,
-                                "Extract the requested fields with bounding boxes from this document.",
-                            ],
-                            config=types.GenerateContentConfig(
-                                system_instruction=system_prompt,
-                                temperature=0.0,
-                            ),
-                        )
+                        if streaming:
+                            return self.client.models.generate_content(
+                                model=genai_model,
+                                contents=[
+                                    file,
+                                    "Extract the requested fields with bounding boxes from this document.",
+                                ],
+                                config=types.GenerateContentConfig(
+                                    system_instruction=system_prompt,
+                                    temperature=0.0,
+                                ),
+                            )
+                        else:
+                            # For non-streaming, we just await the full response
+                            # The client.models.generate_content returns the full response object
+                            # we can iterate on it if it's iterable, or just get .text
+                            return self.client.models.generate_content(
+                                model=genai_model,
+                                contents=[
+                                    file,
+                                    "Extract the requested fields with bounding boxes from this document.",
+                                ],
+                                config=types.GenerateContentConfig(
+                                    system_instruction=system_prompt,
+                                    temperature=0.0,
+                                ),
+                            )
 
                     try:
                         response = make_request()
 
-                        # Handle response - check if it's a stream or regular response
-                        if hasattr(response, "text"):
+                        # Handle response based on streaming mode
+                        if not streaming:
                             # Regular response
-                            full_text = response.text
-                            print(f"\033[36m[RESPONSE] Received response:\033[0m")
-                            print(full_text)
+                            if hasattr(response, "text"):
+                                full_text = response.text
+                                print(f"\033[36m[RESPONSE] Received response:\033[0m")
+                                print(full_text)
 
-                            # Extract usage metadata if available
-                            if (
-                                hasattr(response, "usage_metadata")
-                                and response.usage_metadata
-                            ):
-                                input_tokens = (
-                                    response.usage_metadata.prompt_token_count
-                                )
-                                output_tokens = (
-                                    response.usage_metadata.candidates_token_count
-                                )
+                                # Extract usage metadata if available
+                                if (
+                                    hasattr(response, "usage_metadata")
+                                    and response.usage_metadata
+                                ):
+                                    input_tokens = (
+                                        response.usage_metadata.prompt_token_count
+                                    )
+                                    output_tokens = (
+                                        response.usage_metadata.candidates_token_count
+                                    )
                         else:
                             # Stream response - iterate over response chunks
                             print(f"\033[36m[STREAM] Receiving response:\033[0m")
@@ -381,12 +405,15 @@ class GenAIProcessor:
                 self.logger.error(f"Failed to process file with GenAI API: {str(e)}")
             raise
 
-    def process(self, pdf_path: str, model: str) -> Dict[str, Any]:
+    def process(
+        self, pdf_path: str, model: str, streaming: bool = True
+    ) -> Dict[str, Any]:
         """Process a PDF file using GenAI method.
 
         Args:
             pdf_path: Path to the PDF file to process.
             model: The AI model to use for processing.
+            streaming: Whether to use streaming for API responses.
 
         Returns:
             Dictionary containing extracted data and metadata.
@@ -402,7 +429,7 @@ class GenAIProcessor:
             )
 
             # Send to GenAI API for analysis with selected model
-            api_response = self.send_to_genai_api(pdf_path, model)
+            api_response = self.send_to_genai_api(pdf_path, model, streaming)
 
             # Log the API response to terminal with pretty formatting
             self.logger.info("API Response received successfully")
@@ -651,7 +678,9 @@ class GenAIProcessor:
             return {"error": str(e)}
 
 
-def process_with_genai(pdf_path: str, model: str) -> Dict[str, Any]:
+def process_with_genai(
+    pdf_path: str, model: str, streaming: bool = True
+) -> Dict[str, Any]:
     """Process a PDF file using the GenAI method.
 
     This is a convenience function that maintains compatibility with main.py.
@@ -665,7 +694,7 @@ def process_with_genai(pdf_path: str, model: str) -> Dict[str, Any]:
     """
     try:
         processor = GenAIProcessor()
-        result = processor.process(pdf_path, model)
+        result = processor.process(pdf_path, model, streaming)
         info(f"Successfully processed {os.path.basename(pdf_path)} with GenAI")
         if result.get("output_file"):
             info(f"Results saved to {result['output_file']}")
