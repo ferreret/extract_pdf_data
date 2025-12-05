@@ -175,14 +175,13 @@ class RequestyProcessor:
                 pass
 
                 # Use streaming based on user preference
+                # Use streaming based on user preference
                 if streaming:
                     self.logger.info(f"Starting streaming request to {model}...")
-                    print(f"\033[36mStarting streaming request to {model}...\033[0m")
+                    # print(f"\033[36mStarting streaming request to {model}...\033[0m")
                 else:
                     self.logger.info(f"Starting non-streaming request to {model}...")
-                    print(
-                        f"\033[36mStarting non-streaming request to {model}...\033[0m"
-                    )
+                    # print(f"\033[36mStarting non-streaming request to {model}...\033[0m")
 
                 response_stream = client.chat.completions.create(
                     model=model,
@@ -223,9 +222,7 @@ class RequestyProcessor:
                         self.logger.info(
                             "Attempting fallback to non-streaming request..."
                         )
-                        print(
-                            f"\033[36mAttempting fallback to non-streaming request...\033[0m"
-                        )
+                        # print(f"\033[36mAttempting fallback to non-streaming request...\033[0m")
 
                         response = client.chat.completions.create(
                             model=model,
@@ -336,19 +333,20 @@ class RequestyProcessor:
             self.logger.info("API Response received successfully")
 
             # Pretty print the parsed data if available
-            parsed_data = api_response.get("data", {}).get("parsed_data", {})
-            if parsed_data and "raw_response" not in parsed_data:
-                print("\n" + "=" * 80)
-                print("📄 EXTRACTED DATA FROM PDF")
-                print("=" * 80)
-                print(json.dumps(parsed_data, indent=2, ensure_ascii=False))
-                print("=" * 80)
-            else:
-                print("\n" + "=" * 80)
-                print("⚠️  RAW RESPONSE (JSON parsing failed)")
-                print("=" * 80)
-                print(parsed_data.get("raw_response", "No response data"))
-                print("=" * 80)
+            # Pretty print the parsed data if available
+            # parsed_data = api_response.get("data", {}).get("parsed_data", {})
+            # if parsed_data and "raw_response" not in parsed_data:
+            #     print("\n" + "=" * 80)
+            #     print("📄 EXTRACTED DATA FROM PDF")
+            #     print("=" * 80)
+            #     print(json.dumps(parsed_data, indent=2, ensure_ascii=False))
+            #     print("=" * 80)
+            # else:
+            #     print("\n" + "=" * 80)
+            #     print("⚠️  RAW RESPONSE (JSON parsing failed)")
+            #     print("=" * 80)
+            #     print(parsed_data.get("raw_response", "No response data"))
+            #     print("=" * 80)
 
             # Save the parsed data to JSON file with format: pdffilename-processor-modeselected-datetime.json
             pdf_basename = os.path.splitext(filename)[0]  # Remove .pdf extension

@@ -224,8 +224,6 @@ class GenAIProcessor:
                             # Regular response
                             if hasattr(response, "text"):
                                 full_text = response.text
-                                print(f"\033[36m[RESPONSE] Received response:\033[0m")
-                                print(full_text)
 
                                 # Extract usage metadata if available
                                 if (
@@ -240,7 +238,7 @@ class GenAIProcessor:
                                     )
                         else:
                             # Stream response - iterate over response chunks
-                            print(f"\033[36m[STREAM] Receiving response:\033[0m")
+                            # print(f"\033[36m[STREAM] Receiving response:\033[0m")
                             for chunk in response:
                                 try:
                                     # Handle different chunk formats
@@ -252,12 +250,12 @@ class GenAIProcessor:
                                             and chunk_content.text
                                         ):
                                             text = chunk_content.text
-                                            print(text, end="", flush=True)
+                                            # print(text, end="", flush=True)
                                             full_text += text
                                     elif hasattr(chunk, "text") and chunk.text:
                                         # Direct chunk with text
                                         text = chunk.text
-                                        print(text, end="", flush=True)
+                                        # print(text, end="", flush=True)
                                         full_text += text
                                 except Exception as chunk_error:
                                     self.logger.debug(
@@ -297,7 +295,7 @@ class GenAIProcessor:
                                         f"Error extracting usage: {usage_error}"
                                     )
 
-                            print()  # New line after streaming
+                            # print()  # New line after streaming
 
                         self.logger.info("Response completed successfully")
 
@@ -435,19 +433,19 @@ class GenAIProcessor:
             self.logger.info("API Response received successfully")
 
             # Pretty print the parsed data if available
-            parsed_data = api_response.get("data", {}).get("parsed_data", {})
-            if parsed_data and "raw_response" not in parsed_data:
-                print("\n" + "=" * 80)
-                print("📄 EXTRACTED DATA FROM PDF")
-                print("=" * 80)
-                print(json.dumps(parsed_data, indent=2, ensure_ascii=False))
-                print("=" * 80)
-            else:
-                print("\n" + "=" * 80)
-                print("⚠️  RAW RESPONSE (JSON parsing failed)")
-                print("=" * 80)
-                print(parsed_data.get("raw_response", "No response data"))
-                print("=" * 80)
+            # parsed_data = api_response.get("data", {}).get("parsed_data", {})
+            # if parsed_data and "raw_response" not in parsed_data:
+            #     print("\n" + "=" * 80)
+            #     print("📄 EXTRACTED DATA FROM PDF")
+            #     print("=" * 80)
+            #     print(json.dumps(parsed_data, indent=2, ensure_ascii=False))
+            #     print("=" * 80)
+            # else:
+            #     print("\n" + "=" * 80)
+            #     print("⚠️  RAW RESPONSE (JSON parsing failed)")
+            #     print("=" * 80)
+            #     print(parsed_data.get("raw_response", "No response data"))
+            #     print("=" * 80)
 
             # Save the parsed data to JSON file with format: pdffilename-processor-modeselected-datetime.json
             pdf_basename = os.path.splitext(filename)[0]  # Remove .pdf extension

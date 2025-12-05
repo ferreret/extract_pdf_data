@@ -1,13 +1,20 @@
 import os
 import sys
 import argparse
+import concurrent.futures
 from typing import List, Optional, Callable, Dict, Any
+
 from dotenv import load_dotenv
 
 # Load environment variables before importing other modules
 load_dotenv()
 
-from src.config.settings import INPUT_DIRECTORY, GENAI_MODELS, REQUESTY_MODELS
+from src.config.settings import (
+    INPUT_DIRECTORY,
+    GENAI_MODELS,
+    REQUESTY_MODELS,
+    MAX_WORKERS,
+)
 from src.utils.logger import get_logger, info, warning, error
 from src.processors.genai_processor import process_with_genai
 from src.processors.requesty_processor import process_with_requesty
@@ -151,6 +158,27 @@ def get_streaming_choice() -> bool:
             sys.exit(1)
 
 
+def get_concurrency_choice() -> bool:
+    """Prompt the user to select concurrent execution.
+
+    Returns:
+        True if concurrency is selected, False otherwise.
+    """
+    while True:
+        try:
+            choice_input = (
+                input("\nEnable concurrent execution (y/n)? [n]: ").strip().lower()
+            )
+            if choice_input in ["", "n", "no"]:
+                return False
+            if choice_input in ["y", "yes"]:
+                return True
+            warning("Invalid choice. Please enter 'y' or 'n'.")
+        except EOFError:
+            error("No input received. Exiting program.")
+            sys.exit(1)
+
+
 def get_user_choice() -> str:
     """Prompt the user to select a processing option.
 
@@ -212,13 +240,16 @@ def show_model_selection_menu(models: dict, option_name: str) -> str:
             sys.exit(0)
 
 
-def process_pdf_files(choice: str, model: str, streaming: bool = True) -> None:
+def process_pdf_files(
+    choice: str, model: str, streaming: bool = True, is_concurrent: bool = False
+) -> None:
     """Process all PDF files in the input directory using the specified method.
 
     Args:
         choice: The processing method to use ("genai" or "requesty").
         model: The selected AI model to use for processing.
         streaming: Whether to use streaming for API responses.
+        is_concurrent: Whether to use concurrent execution.
     """
     try:
         pdf_files = find_pdf_files(INPUT_DIRECTORY)
@@ -232,11 +263,33 @@ def process_pdf_files(choice: str, model: str, streaming: bool = True) -> None:
         # Get the appropriate processing function
         process_function = get_processing_function(choice)
 
-        # Process each PDF file
-        for pdf_file in pdf_files:
-            pdf_path = os.path.join(INPUT_DIRECTORY, pdf_file)
-            info(f"Processing file: {pdf_file}")
-            process_function(pdf_path, model, streaming)
+        if is_concurrent:
+            info(f"Starting concurrent execution with {MAX_WORKERS} workers")
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=MAX_WORKERS
+            ) as executor:
+                # Create a list of futures
+                futures = []
+                for pdf_file in pdf_files:
+                    pdf_path = os.path.join(INPUT_DIRECTORY, pdf_file)
+                    # Submit task to executor. Note: streaming is forced to False for concurrent execution usually,
+                    # but we pass the value provided (which should be False from start_process logic).
+                    futures.append(
+                        executor.submit(process_function, pdf_path, model, streaming)
+                    )
+
+                # Wait for all futures to complete
+                for future in concurrent.futures.as_completed(futures):
+                    try:
+                        future.result()
+                    except Exception as exc:
+                        error(f"Generated an exception: {exc}")
+        else:
+            # Process each PDF file sequentially
+            for pdf_file in pdf_files:
+                pdf_path = os.path.join(INPUT_DIRECTORY, pdf_file)
+                info(f"Processing file: {pdf_file}")
+                process_function(pdf_path, model, streaming)
 
     except OSError as e:
         error(str(e))
@@ -282,17 +335,21 @@ def start_process(choice: Optional[str] = None) -> None:
     else:  # REQUESTY_OPTION
         selected_model = show_model_selection_menu(REQUESTY_MODELS, REQUESTY_OPTION)
 
-    # Get streaming preference
-    # If choice was provided via CLI, we might want to default to True or add a flag
-    # For now, we'll ask if not automated (though here we process interactive flow)
-    # Since start_process is the interactive entry point mostly, let's ask.
-    # Note: If args.choice is present, we still land here.
-    # We should add CLI support for streaming too, but for interactive:
-    streaming = get_streaming_choice()
-    info(f"Streaming enabled: {streaming}")
+    # Get concurrency preference
+    is_concurrent = get_concurrency_choice()
 
-    # Process all PDF files with the selected method, model, and streaming preference
-    process_pdf_files(choice, selected_model, streaming)
+    # Determine streaming preference based on concurrency
+    if is_concurrent:
+        # If concurrent is enabled, we force streaming to False to avoid mixed output
+        streaming = False
+        info("Concurrency enabled: Streaming disabled automatically.")
+    else:
+        # If not concurrent, we ask for streaming preference
+        streaming = get_streaming_choice()
+        info(f"Streaming enabled: {streaming}")
+
+    # Process all PDF files with the selected method, model, and preferences
+    process_pdf_files(choice, selected_model, streaming, is_concurrent)
 
 
 def parse_arguments() -> argparse.Namespace:

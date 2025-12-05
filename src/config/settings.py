@@ -11,6 +11,7 @@ MODEL_GENAI = ""
 MODEL_REQUESTY = ""
 REQUESTY_BASE_URL = os.environ.get("REQUESTY_BASE_URL", "")
 GENAI_API_KEY = os.environ.get("GENAI_API_KEY", "")
+MAX_WORKERS = int(os.environ.get("MAX_WORKERS", "4"))
 
 # Available AI models for GenAI processor (Google's GenAI)
 GENAI_MODELS = {
