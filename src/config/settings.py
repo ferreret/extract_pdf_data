@@ -1,7 +1,7 @@
 import os
 
 # Get the project root directory (parent of src)
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 INPUT_DIRECTORY = os.path.join(PROJECT_ROOT, "data", "input")
 
