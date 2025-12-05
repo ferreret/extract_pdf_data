@@ -6,7 +6,7 @@ import glob
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, Union
 
-from settings import LOGGING_CONFIG, LOG_FILE_PATH, LOG_DIR, LOG_COLORS
+from src.config.settings import LOGGING_CONFIG, LOG_FILE_PATH, LOG_DIR, LOG_COLORS
 
 
 class CustomLogRecord(logging.LogRecord):

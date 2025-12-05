@@ -17,7 +17,7 @@ if not os.environ.get("GENAI_API_KEY"):
     sys.exit(1)
 
 try:
-    from genai_processor import GenAIProcessor
+    from src.processors.genai_processor import GenAIProcessor
     print("✅ Successfully imported GenAIProcessor")
     
     # Try to initialize the processor

@@ -1,6 +1,9 @@
 import os
 
-INPUT_DIRECTORY = "/media/nicolas/DATA/Tecnomedia/Echevarne/Proyecto lectura peticiones/extract_pdf_data/input"
+# Get the project root directory (parent of src)
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+INPUT_DIRECTORY = os.path.join(PROJECT_ROOT, "data", "input")
 
 MODEL_GENAI = ""
 MODEL_REQUESTY = ""
@@ -51,7 +54,7 @@ LOGGING_CONFIG = {
             "class": "logging.handlers.RotatingFileHandler",
             "level": "DEBUG",
             "formatter": "detailed",
-            "filename": "logs/app.log",
+            "filename": os.path.join(PROJECT_ROOT, "data", "logs", "app.log"),
             "maxBytes": 10485760,  # 10 MB
             "backupCount": 5,
             "encoding": "utf8",
@@ -63,8 +66,8 @@ LOGGING_CONFIG = {
 }
 
 # Log file paths
-LOG_FILE_PATH = "logs/app.log"
-LOG_DIR = "logs"
+LOG_FILE_PATH = os.path.join(PROJECT_ROOT, "data", "logs", "app.log")
+LOG_DIR = os.path.join(PROJECT_ROOT, "data", "logs")
 
 # Default log level
 DEFAULT_LOG_LEVEL = "DEBUG"

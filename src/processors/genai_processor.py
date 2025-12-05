@@ -25,8 +25,8 @@ from google.genai import types
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
-from logger import debug, error, get_logger, info, warning
-from settings import GENAI_API_KEY
+from src.utils.logger import debug, error, get_logger, info, warning
+from src.config.settings import GENAI_API_KEY
 
 # Get a logger instance for this module
 logger = get_logger(__name__)
@@ -94,7 +94,7 @@ class GenAIProcessor:
         try:
             # Load system prompt from file
             with open(
-                "prompts/genai_system_prompt.md", "r", encoding="utf-8"
+                os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "prompts", "genai_system_prompt.md"), "r", encoding="utf-8"
             ) as prompt_file:
                 system_prompt = prompt_file.read()
 

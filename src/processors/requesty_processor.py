@@ -24,8 +24,8 @@ from openai import OpenAI
 from openai.types.chat import ChatCompletionSystemMessageParam
 
 
-from logger import debug, error, get_logger, info, warning
-from settings import REQUESTY_BASE_URL
+from src.utils.logger import debug, error, get_logger, info, warning
+from src.config.settings import REQUESTY_BASE_URL
 
 # Get a logger instance for this module
 logger = get_logger(__name__)
@@ -101,7 +101,7 @@ class RequestyProcessor:
 
             # Load system prompt from file
             with open(
-                "prompts/requesty_system_prompt.md", "r", encoding="utf-8"
+                os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "prompts", "requesty_system_prompt.md"), "r", encoding="utf-8"
             ) as prompt_file:
                 system_prompt = prompt_file.read()
 

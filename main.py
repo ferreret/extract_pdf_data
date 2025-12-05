@@ -7,10 +7,10 @@ from dotenv import load_dotenv
 # Load environment variables before importing other modules
 load_dotenv()
 
-from settings import INPUT_DIRECTORY, GENAI_MODELS, REQUESTY_MODELS
-from logger import get_logger, info, warning, error
-from genai_processor import process_with_genai
-from requesty_processor import process_with_requesty
+from src.config.settings import INPUT_DIRECTORY, GENAI_MODELS, REQUESTY_MODELS
+from src.utils.logger import get_logger, info, warning, error
+from src.processors.genai_processor import process_with_genai
+from src.processors.requesty_processor import process_with_requesty
 
 # Get a logger instance for this module
 logger = get_logger(__name__)
@@ -46,7 +46,7 @@ def demonstrate_logging():
 
     # Demonstrate runtime log level change
     print("\n--- Changing log level to WARNING ---")
-    from logger import set_level
+    from src.utils.logger import set_level
 
     set_level("WARNING")
     logger.debug("This debug message won't appear")
